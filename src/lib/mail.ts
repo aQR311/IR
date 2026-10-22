@@ -3,6 +3,7 @@ import { env } from "./env";
 
 export async function sendMail(to: string, subject: string, text: string) {
   const e = env();
+  if (e.MAIL_DRIVER === "disabled") throw new Error("Gửi email đang tắt (MAIL_DRIVER=disabled)");
   if (e.MAIL_DRIVER === "console") {
     // Chỉ dev (env() chặn driver này ở production).
     console.log(`\n[mail:dev] To: ${to}\nSubject: ${subject}\n${text}\n`);

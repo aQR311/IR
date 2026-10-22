@@ -8,6 +8,8 @@ export const PERMISSIONS = [
   "kyc.edit",
   "captable.view",
   "captable.export",
+  "equity.configure", // lớp cổ phần, vòng gọi vốn, ngưỡng cổ đông lớn
+  "data.import",
   "txn.create",
   "txn.post",
   "esop.view",
@@ -37,6 +39,7 @@ const ROLE_PERMS: Record<Role, readonly Permission[]> = {
   LEGAL: [
     "investors.view", "investors.edit", "kyc.reveal", "kyc.edit", "captable.view", "txn.create",
     "esop.view", "convertibles.manage", "documents.view", "documents.confidential", "documents.upload",
+    "equity.configure", "data.import",
   ],
   FINANCE: [
     "investors.view", "captable.view", "captable.export", "txn.create", "txn.post", "esop.view",

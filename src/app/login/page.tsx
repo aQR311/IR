@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { devLoginEnabled, googleEnabled, larkEnabled } from "@/lib/env";
+import { devLoginEnabled, googleEnabled, larkEnabled, otpEnabled } from "@/lib/env";
 import { loginErrorMessage } from "@/lib/auth/errors";
 import { safeNext } from "@/lib/auth/oauth";
 import { ROLE_LABEL } from "@/lib/permissions";
@@ -50,11 +50,13 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         </div>
       </section>
 
-      <section className="mt-4 rounded-lg border border-line bg-surface p-4">
-        <h2 className="text-sm font-semibold">Nhà đầu tư, kiểm toán & đối tác</h2>
-        <p className="mt-1 text-xs text-muted">Nhận mã dùng một lần qua email đã đăng ký. Không dùng mật khẩu.</p>
-        <OtpLogin />
-      </section>
+      {otpEnabled() && (
+        <section className="mt-4 rounded-lg border border-line bg-surface p-4">
+          <h2 className="text-sm font-semibold">Nhà đầu tư, kiểm toán & đối tác</h2>
+          <p className="mt-1 text-xs text-muted">Nhận mã dùng một lần qua email đã đăng ký. Không dùng mật khẩu.</p>
+          <OtpLogin />
+        </section>
+      )}
 
       {devUsers.length > 0 && (
         <section className="mt-4 rounded-lg border border-dashed border-warn bg-warn-soft p-4">

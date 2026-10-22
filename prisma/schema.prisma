@@ -323,12 +323,14 @@ model ShareTransaction {
   reversedBy     ShareTransaction? @relation("Reversal")
   docRef         String? // số hợp đồng / nghị quyết
   note           String?
+  importBatch    String? // mã lô import CSV — cả lô được ghi sổ cùng lúc
   createdById    String
   createdAt      DateTime      @default(now())
   postedById     String? // maker–checker: phải khác createdById
   postedAt       DateTime?
 
   @@index([status, date])
+  @@index([importBatch])
 }
 
 enum ConvertibleKind {

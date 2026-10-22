@@ -2,6 +2,7 @@ import "server-only";
 import { randomInt } from "node:crypto";
 import { db } from "../db";
 import { hmacHex, safeEqualHex } from "../crypto";
+import { otpEnabled } from "../env";
 import { sendMail } from "../mail";
 import { recordAttempt, tooManyFailures } from "./rate-limit";
 
@@ -17,6 +18,7 @@ const digest = (email: string, code: string) => hmacHex(`${email}:${code}`, "otp
  */
 export async function requestOtp(rawEmail: string, ip: string | null): Promise<void> {
   const email = rawEmail.trim().toLowerCase();
+  if (!otpEnabled()) return;
   if (await tooManyFailures(email, ip)) return;
   const since = new Date(Date.now() - 15 * 60_000);
   const recent = await db.otpCode.count({ where: { email, createdAt: { gte: since } } });
@@ -49,6 +51,7 @@ export async function requestOtp(rawEmail: string, ip: string | null): Promise<v
 
 export async function verifyOtp(rawEmail: string, code: string, ip: string | null) {
   const email = rawEmail.trim().toLowerCase();
+  if (!otpEnabled()) return null;
   const fail = async (reason: string) => {
     await recordAttempt({ email, ip, method: "otp", ok: false, reason });
     return null;

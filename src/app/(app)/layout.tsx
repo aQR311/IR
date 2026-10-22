@@ -3,7 +3,8 @@ import { can, ROLE_LABEL, type Permission } from "@/lib/permissions";
 import { logoutAction } from "@/server/actions/auth";
 import { NavLinks } from "./nav-links";
 
-const NAV: { href: string; label: string; perm: Permission | null }[] = [
+// perm là mảng = có một trong các quyền là thấy mục.
+const NAV: { href: string; label: string; perm: Permission | Permission[] | null }[] = [
   { href: "/dashboard", label: "Tổng quan", perm: null },
   { href: "/investors", label: "Nhà đầu tư", perm: "investors.view" },
   { href: "/captable", label: "Cap Table", perm: "captable.view" },
@@ -11,13 +12,15 @@ const NAV: { href: string; label: string; perm: Permission | null }[] = [
   { href: "/esop", label: "ESOP", perm: "esop.view" },
   { href: "/convertibles", label: "SAFE / Chuyển đổi", perm: "captable.view" },
   { href: "/documents", label: "Tài liệu", perm: "documents.view" },
+  { href: "/import", label: "Nhập dữ liệu", perm: ["data.import", "txn.post"] },
+  { href: "/settings/equity", label: "Cấu hình vốn", perm: "equity.configure" },
   { href: "/audit", label: "Nhật ký kiểm toán", perm: "audit.view" },
   { href: "/admin/users", label: "Tài khoản", perm: "users.manage" },
 ];
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const u = await requireInternal();
-  const items = NAV.filter((n) => !n.perm || can(u, n.perm)).map(({ href, label }) => ({ href, label }));
+  const items = NAV.filter((n) => !n.perm || [n.perm].flat().some((p) => can(u, p))).map(({ href, label }) => ({ href, label }));
   return (
     <div className="min-h-screen md:flex">
       <aside className="border-b border-line bg-surface md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:border-b-0 md:border-r">

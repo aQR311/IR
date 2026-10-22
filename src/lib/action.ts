@@ -2,7 +2,8 @@ import "server-only";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 
-export type ActionResult = { ok: boolean; message: string; data?: Record<string, string> };
+export type PreviewRow = { line: number; label: string; detail: string; error?: string };
+export type ActionResult = { ok: boolean; message: string; data?: Record<string, string>; rows?: PreviewRow[] };
 
 export const ok = (message: string, data?: Record<string, string>): ActionResult => ({ ok: true, message, data });
 export const fail = (message: string): ActionResult => ({ ok: false, message });

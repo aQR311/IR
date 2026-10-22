@@ -42,6 +42,25 @@ Kiểm tra: `npm run typecheck`, `npm run lint`, `npm test`.
 5. **HTTP:** CSP chặt, `frame-ancestors 'none'`, HSTS, `no-store` cho mọi trang, server action có kiểm tra Origin. Lỗi đăng nhập chỉ hiển thị theo mã cố định (không phản chiếu chuỗi từ URL).
 6. **Chống dò:** giới hạn 5 lần sai / email và 20 lần sai / IP trong 15 phút. OTP 6 số, 10 phút, tối đa 5 lần thử, chỉ dùng một lần. Phản hồi giống nhau dù email có tồn tại hay không.
 
+## Go-live: thứ tự làm
+
+1. **Supabase production** (Pro, Singapore) + **Supabase staging** (Free). Mỗi project lấy 2 chuỗi kết nối (xem mục Supabase bên dưới). Tạo bucket private `irhub-private` ở cả hai.
+2. **Google OAuth** (Internal): redirect `https://<domain>/api/auth/google/callback`.
+3. **Vercel**: import repo, region `sin1`. Khai biến môi trường cho **Production** (DB production) và **Preview** (DB staging), mỗi môi trường một bộ `DATA_KEY` / `AUTH_PEPPER` riêng. Giai đoạn đầu chỉ có người nội bộ thì đặt `MAIL_DRIVER=disabled`.
+4. Deploy lần đầu: build tự chạy `prisma migrate deploy` để tạo bảng.
+5. **Tạo admin đầu tiên** từ máy bạn, trỏ vào DB production bằng một file env riêng (không commit):
+   ```powershell
+   $env:DOTENV_CONFIG_PATH=".env.production.local"
+   npm run bootstrap -- --email it@appota.com --name "Tên IT" --role SYS_ADMIN
+   npm run bootstrap -- --email cfo@appota.com --name "Tên CFO" --role EXEC
+   ```
+   Lệnh chỉ chạy được khi vai trò đó chưa có ai. Các tài khoản khác tạo trong màn hình **Tài khoản**.
+6. Đăng nhập bằng CEO/CFO (hoặc Pháp chế) → **Cấu hình vốn**: tạo lớp cổ phần và vòng gọi vốn.
+7. **Nhập dữ liệu**: tải file mẫu → điền trong Excel → Lưu thành **CSV UTF-8** → Kiểm tra → Nhập. Nhập nhà đầu tư trước, giao dịch sau. Lô giao dịch phải được một người khác (Kế toán/CEO) bấm **Ghi sổ cả lô**.
+8. Đối chiếu Cap Table với sổ cổ đông giấy / Excel cũ trước khi dùng chính thức.
+
+**Quy trình sửa sau go-live:** sửa trên nhánh riêng → push → Vercel tạo link Preview (DB staging) → xem ổn thì merge vào `main` → tự deploy production. Migration chỉ thêm bảng/cột, không xoá, nên dữ liệu đã nhập không mất.
+
 ## Triển khai lên Supabase + Vercel + GitHub
 
 ### GitHub
@@ -61,9 +80,9 @@ Kiểm tra: `npm run typecheck`, `npm run lint`, `npm test`.
 6. Bảng tạo mới ở migration sau **phải** tự bật RLS (xem `20261022081245_security_hardening`).
 
 ### Vercel
-1. Import repo GitHub; Build Command: `npm run vercel-build` (gồm generate + `migrate deploy` + build).
+1. Import repo GitHub. Vercel tự dùng script `vercel-build` (generate + `migrate deploy` + build), không cần sửa Build Command.
 2. Function Region: `sin1` (cùng vùng Supabase).
-3. Biến môi trường (đánh dấu **Sensitive**): theo `.env.example`. Production phải có `MAIL_DRIVER=resend`, `STORAGE_DRIVER=supabase`, `APP_URL=https://…`, `ALLOW_DEV_LOGIN=false`. App tự từ chối khởi động nếu cấu hình production sai.
+3. Biến môi trường (đánh dấu **Sensitive**): theo `.env.example`. Production phải có `MAIL_DRIVER=resend` hoặc `disabled`, `STORAGE_DRIVER=supabase`, `APP_URL=https://…`, `ALLOW_DEV_LOGIN=false`. App tự từ chối khởi động nếu cấu hình production sai.
 4. Bật Deployment Protection cho Preview; Preview dùng DB Supabase riêng, không dùng DB thật.
 5. Bật WAF / rate limit cho `/login` và `/api/auth/*`.
 
@@ -75,6 +94,6 @@ Kiểm tra: `npm run typecheck`, `npm run lint`, `npm test`.
 CCCD và tài khoản ngân hàng là dữ liệu cá nhân nhạy cảm, nay lưu ở Singapore → Pháp chế cần lập hồ sơ đánh giá tác động chuyển dữ liệu cá nhân ra nước ngoài theo Luật Bảo vệ dữ liệu cá nhân trước khi nhập dữ liệu thật.
 
 ## Chưa làm (các phase sau)
-- P1: engine phê duyệt nhiều tầng (chờ ma trận duyệt), bảng điều phối thủ tục, mẫu văn bản, đợt kiểm toán, import Cap Table từ Excel (chờ file mẫu), passkey cho NĐT, webhook Lark khi nhân sự nghỉ việc → thu hồi phiên.
+- P1: engine phê duyệt nhiều tầng (chờ ma trận duyệt), bảng điều phối thủ tục, mẫu văn bản, đợt kiểm toán, import ESOP / SAFE từ file, passkey cho NĐT, webhook Lark khi nhân sự nghỉ việc → thu hồi phiên.
 - P2: Data Room có watermark, bản tin IR, lấy ý kiến cổ đông / biểu quyết, báo cáo quản trị.
 - P3: đồng bộ KPI, mô phỏng vòng gọi vốn & pha loãng, ký số, AI.

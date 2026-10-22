@@ -12,7 +12,8 @@
     "test": "vitest run",
     "db:local": "node scripts/db-local.mjs",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx --conditions=react-server prisma/seed.ts",
+    "bootstrap": "tsx --conditions=react-server scripts/bootstrap-admin.ts",
+    "db:seed":"tsx --conditions=react-server prisma/seed.ts",
     "db:reset-local": "prisma migrate reset --force --skip-seed && tsx --conditions=react-server prisma/seed.ts"
   },
   "dependencies": {

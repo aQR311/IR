@@ -2,16 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import type { InvestorStage } from "@prisma/client";
-import { db, type Tx } from "@/lib/db";
+import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { computeHoldings, grantSummary, holderTotal } from "@/lib/cap-math";
+import { computeHoldings, grantSummary } from "@/lib/cap-math";
 import { clientInfo } from "@/lib/request";
 import { authorize } from "@/lib/session";
 import { dbError, fail, ok, parseForm, zDate, zId, zMoney, zShares, zText, type ActionResult } from "@/lib/action";
 import { postedLedger } from "../captable";
-
-const LEDGER_LOCK = 7_331_002; // ghi sổ tuần tự: 2 giao dịch song song không thể cùng tiêu một số dư
+import { LEDGER_LOCK, syncStages } from "../ledger";
 
 const txnSchema = z.object({
   kind: z.enum(["ISSUE", "TRANSFER", "REDEMPTION"]),
@@ -74,28 +72,6 @@ export async function createTxnAction(_: ActionResult | null, fd: FormData): Pro
   }
   revalidatePath("/transactions");
   return ok("Đã tạo giao dịch nháp. Cần một người khác có quyền ghi sổ duyệt.");
-}
-
-/** Cập nhật trạng thái vòng đời NĐT theo số dư sau khi ghi sổ. */
-async function syncStages(tx: Tx, investorIds: string[], byId: string) {
-  const holdings = computeHoldings(await postedLedger(tx));
-  for (const id of investorIds) {
-    const inv = await tx.investor.findUnique({ where: { id }, select: { stage: true } });
-    if (!inv) continue;
-    const now = holderTotal(holdings.get(id));
-    const everHeld = await tx.shareTransaction.count({ where: { status: "POSTED", toInvestorId: id } });
-    let to: InvestorStage | null = null;
-    if (now > 0n) {
-      const soldSome = await tx.shareTransaction.count({ where: { status: "POSTED", fromInvestorId: id } });
-      to = soldSome > 0 ? "PARTIAL_EXIT" : "SHAREHOLDER";
-    } else if (everHeld > 0) {
-      to = "EXITED";
-    }
-    if (to && to !== inv.stage) {
-      await tx.investor.update({ where: { id }, data: { stage: to } });
-      await tx.stageChange.create({ data: { investorId: id, from: inv.stage, to, byId, note: "Tự động theo sổ cái" } });
-    }
-  }
 }
 
 export async function postTxnAction(_: ActionResult | null, fd: FormData): Promise<ActionResult> {

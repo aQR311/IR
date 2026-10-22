@@ -23,7 +23,8 @@ const schema = z.object({
   LARK_ACCOUNTS_BASE: z.url().default("https://accounts.larksuite.com"),
   LARK_OPEN_BASE: z.url().default("https://open.larksuite.com"),
 
-  MAIL_DRIVER: z.enum(["console", "resend"]).default("console"),
+  // "disabled": tắt đăng nhập OTP (giai đoạn chỉ có nhân sự nội bộ dùng Google/Lark).
+  MAIL_DRIVER: z.enum(["console", "resend", "disabled"]).default("console"),
   RESEND_API_KEY: z.string().default(""),
   MAIL_FROM: z.string().default("IR Appota <ir@appota.com>"),
 
@@ -51,6 +52,8 @@ export function env(): Env {
   const e = parsed.data;
   if (e.NODE_ENV === "production") {
     if (e.MAIL_DRIVER === "console") throw new Error("MAIL_DRIVER=console bị cấm ở production");
+    if (e.MAIL_DRIVER === "resend" && !e.RESEND_API_KEY) throw new Error("Thiếu RESEND_API_KEY");
+    if (e.ALLOW_DEV_LOGIN === "true") throw new Error("ALLOW_DEV_LOGIN phải tắt ở production");
     if (e.STORAGE_DRIVER === "local") throw new Error("STORAGE_DRIVER=local bị cấm ở production");
     if (!e.APP_URL.startsWith("https://")) throw new Error("APP_URL production phải là https");
   }
@@ -70,6 +73,7 @@ export function devLoginEnabled(): boolean {
   );
 }
 
-export const googleEnabled = () => Boolean(env().GOOGLE_CLIENT_ID && env().GOOGLE_CLIENT_SECRET);
+export const otpEnabled = () => env().MAIL_DRIVER !== "disabled";
+export const googleEnabled =() => Boolean(env().GOOGLE_CLIENT_ID && env().GOOGLE_CLIENT_SECRET);
 export const larkEnabled = () =>
   Boolean(env().LARK_APP_ID && env().LARK_APP_SECRET && env().LARK_TENANT_KEY);
