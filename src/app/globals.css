@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --border: #e3e6eb;
+  --text: #15181e;
+  --muted: #5d6573;
+  --accent: #1f5eff;
+  --accent-soft: #e8eeff;
+  --ok: #12805c;
+  --ok-soft: #e3f5ee;
+  --warn: #a35a00;
+  --warn-soft: #fff3e0;
+  --bad: #c42b2b;
+  --bad-soft: #fdeaea;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116;
+    --surface: #161a21;
+    --surface-2: #1c212a;
+    --border: #2a303b;
+    --text: #e8ebf0;
+    --muted: #9aa3b2;
+    --accent: #6b93ff;
+    --accent-soft: #1b2643;
+    --ok: #4cc79a;
+    --ok-soft: #12302a;
+    --warn: #f0a94a;
+    --warn-soft: #33260f;
+    --bad: #ff7b7b;
+    --bad-soft: #3a1c1c;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Form controls dùng chung */
+.field {
+  @apply w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/20;
+}
+.label {
+  @apply mb-1 block text-xs font-medium text-muted;
+}
+.btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50;
+}
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-2 disabled:opacity-50;
+}
+.btn-danger {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-bad/40 bg-surface px-3 py-1.5 text-sm font-medium text-bad hover:bg-bad-soft disabled:opacity-50;
+}
+.tbl {
+  @apply w-full border-collapse text-sm;
+}
+.tbl th {
+  @apply border-b border-line px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted;
+}
+.tbl td {
+  @apply border-b border-line px-3 py-2 align-top;
+}
+.tbl tr:last-child td {
+  @apply border-b-0;
+}

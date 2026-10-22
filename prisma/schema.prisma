@@ -1,0 +1,445 @@
+// Appota IR & Equity Hub — Phase 0 schema.
+//
+// Mọi bảng nằm trong schema Postgres `irhub` (chọn qua `?schema=irhub` trong DATABASE_URL),
+// KHÔNG nằm trong `public`, nên Supabase Data API (PostgREST) không expose được.
+// Quy ước: số cổ phần = BigInt, tiền = Decimal. Không dùng Float cho dữ liệu vốn.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ───────────────────────── Người dùng & phiên ─────────────────────────
+
+enum UserKind {
+  INTERNAL // nhân sự Appota — chỉ đăng nhập qua Lark / Google Workspace
+  EXTERNAL // nhà đầu tư, kiểm toán, luật sư ngoài — đăng nhập OTP email
+}
+
+enum Role {
+  SYS_ADMIN // IT: quản lý tài khoản, xem audit — KHÔNG xem dữ liệu vốn
+  EXEC // CEO / CFO
+  IR_LEAD
+  IR_STAFF
+  LEGAL
+  FINANCE
+  HR_ESOP
+  AUDITOR
+  INVESTOR
+  PROSPECT
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+// Mức xem dữ liệu tiền (định giá, số tiền đầu tư, giá cổ phần). Ghi đè mặc định của vai trò.
+enum MoneyAccess {
+  ROLE_DEFAULT
+  NONE
+  FULL
+}
+
+model User {
+  id            String      @id @default(cuid())
+  email         String      @unique // luôn lưu chữ thường
+  name          String
+  kind          UserKind
+  role          Role
+  status        UserStatus  @default(ACTIVE)
+  moneyAccess   MoneyAccess @default(ROLE_DEFAULT)
+  larkOpenId    String?     @unique
+  googleSub     String?     @unique
+  investorId    String?     @unique // tài khoản nhà đầu tư gắn với hồ sơ NĐT
+  investor      Investor?   @relation("InvestorAccount", fields: [investorId], references: [id])
+  accessExpires DateTime? // bắt buộc với EXTERNAL: tự khoá khi hết hạn
+  lastLoginAt   DateTime?
+  createdAt     DateTime    @default(now())
+  createdById   String?
+  updatedAt     DateTime    @updatedAt
+
+  sessions       Session[]
+  ownedInvestors Investor[]    @relation("IrOwner")
+  interactions   Interaction[]
+}
+
+model Session {
+  id         String   @id // sha256(token) — token gốc chỉ nằm trong cookie
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  method     String // lark | google | otp | dev
+  createdAt  DateTime @default(now())
+  authAt     DateTime @default(now()) // lần xác thực gần nhất (dùng cho step-up)
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
+}
+
+model OtpCode {
+  id        String    @id @default(cuid())
+  email     String
+  codeHash  String // HMAC-SHA256(pepper, code)
+  expiresAt DateTime
+  attempts  Int       @default(0)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  ip        String?
+
+  @@index([email, createdAt])
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String?
+  ip        String?
+  method    String
+  ok        Boolean
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
+}
+
+// Nhật ký kiểm toán: chỉ ghi thêm. Trigger DB chặn UPDATE/DELETE; mỗi dòng nối hash dòng trước.
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  at         DateTime @default(now())
+  actorId    String?
+  actorEmail String?
+  action     String // vd "investor.create", "kyc.reveal", "txn.post"
+  entityType String?
+  entityId   String?
+  ip         String?
+  data       Json?
+  prevHash   String
+  hash       String   @unique
+
+  @@index([entityType, entityId])
+  @@index([actorId, at])
+}
+
+// ───────────────────────── Nhà đầu tư (CRM) ─────────────────────────
+
+enum InvestorType {
+  INDIVIDUAL
+  ORGANIZATION
+}
+
+enum InvestorCategory {
+  FOUNDER
+  VC
+  STRATEGIC
+  ANGEL
+  EMPLOYEE
+  OTHER
+}
+
+// Vòng đời nhà đầu tư: tiềm năng → đã đầu tư → đã exit.
+enum InvestorStage {
+  LEAD
+  CONTACTED
+  NDA
+  DUE_DILIGENCE
+  TERM_SHEET
+  COMMITTED
+  SHAREHOLDER
+  PARTIAL_EXIT
+  EXITED
+  DROPPED
+}
+
+enum KycStatus {
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model Investor {
+  id         String           @id @default(cuid())
+  code       String           @unique // vd INV-0001
+  name       String
+  type       InvestorType
+  category   InvestorCategory
+  stage      InvestorStage    @default(LEAD)
+  isForeign  Boolean          @default(false)
+  country    String           @default("VN")
+  email      String?
+  phone      String?
+  address    String?
+  taxCode    String?
+  // Trường nhạy cảm: mã hoá AES-256-GCM ở tầng app, khoá không nằm trong DB.
+  idNumberEnc    String? // CCCD / hộ chiếu / số ĐKKD
+  bankAccountEnc String? // tài khoản nhận cổ tức
+  kycStatus  KycStatus        @default(NOT_STARTED)
+  irOwnerId  String?
+  irOwner    User?            @relation("IrOwner", fields: [irOwnerId], references: [id])
+  notes      String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  account       User?                   @relation("InvestorAccount")
+  contacts      InvestorContact[]
+  interactions  Interaction[]
+  stageHistory  StageChange[]
+  txnsIn        ShareTransaction[]      @relation("TxnTo")
+  txnsOut       ShareTransaction[]      @relation("TxnFrom")
+  convertibles  ConvertibleInstrument[]
+  esopGrants    EsopGrant[]
+  documents     Document[]
+}
+
+model InvestorContact {
+  id         String   @id @default(cuid())
+  investorId String
+  investor   Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  name       String
+  title      String?
+  email      String?
+  phone      String?
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model Interaction {
+  id         String   @id @default(cuid())
+  investorId String
+  investor   Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  date       DateTime
+  kind       String // MEETING | CALL | EMAIL | NOTE
+  summary    String
+  createdAt  DateTime @default(now())
+
+  @@index([investorId, date])
+}
+
+model StageChange {
+  id         String         @id @default(cuid())
+  investorId String
+  investor   Investor       @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  from       InvestorStage?
+  to         InvestorStage
+  note       String?
+  byId       String
+  at         DateTime       @default(now())
+}
+
+// ───────────────────────── Bảng vốn (Cap Table) ─────────────────────────
+
+enum ShareClassKind {
+  COMMON
+  PREFERRED
+}
+
+model ShareClass {
+  id                 String         @id @default(cuid())
+  code               String         @unique // vd CP_PT, UD_SEED
+  name               String
+  kind               ShareClassKind
+  votesPerShare      Int            @default(1)
+  parValue           Decimal        @default(10000) @db.Decimal(20, 2) // mệnh giá VND
+  liquidationPrefX   Decimal        @default(0) @db.Decimal(6, 2)
+  seniority          Int            @default(0)
+  participating      Boolean        @default(false)
+  notes              String?
+  createdAt          DateTime       @default(now())
+
+  transactions ShareTransaction[]
+  esopPools    EsopPool[]
+}
+
+enum RoundStatus {
+  PLANNED
+  OPEN
+  CLOSED
+}
+
+model FundingRound {
+  id            String      @id @default(cuid())
+  code          String      @unique // vd SEED_2019
+  name          String
+  status        RoundStatus @default(PLANNED)
+  closeDate     DateTime?
+  currency      String      @default("VND")
+  preMoney      Decimal?    @db.Decimal(24, 2)
+  pricePerShare Decimal?    @db.Decimal(24, 6)
+  targetAmount  Decimal?    @db.Decimal(24, 2)
+  notes         String?
+  createdAt     DateTime    @default(now())
+
+  transactions ShareTransaction[]
+}
+
+enum TxnKind {
+  ISSUE // phát hành mới (kể cả chuyển đổi SAFE, thực hiện quyền ESOP)
+  TRANSFER // chuyển nhượng thứ cấp from → to
+  REDEMPTION // công ty mua lại / huỷ cổ phần của from (exit qua mua lại)
+}
+
+enum TxnStatus {
+  DRAFT // đang soạn — sửa / huỷ được
+  POSTED // đã ghi sổ — bất biến, chỉ đảo bằng giao dịch đối ứng
+  CANCELLED // nháp bị huỷ
+}
+
+// Sổ cái cổ phần: nguồn sự thật duy nhất. Số dư & % sở hữu luôn tính từ các dòng POSTED.
+model ShareTransaction {
+  id             String        @id @default(cuid())
+  seq            Int           @unique @default(autoincrement())
+  kind           TxnKind
+  status         TxnStatus     @default(DRAFT)
+  date           DateTime // ngày hiệu lực
+  shareClassId   String
+  shareClass     ShareClass    @relation(fields: [shareClassId], references: [id])
+  quantity       BigInt
+  fromInvestorId String?
+  fromInvestor   Investor?     @relation("TxnFrom", fields: [fromInvestorId], references: [id])
+  toInvestorId   String?
+  toInvestor     Investor?     @relation("TxnTo", fields: [toInvestorId], references: [id])
+  roundId        String?
+  round          FundingRound? @relation(fields: [roundId], references: [id])
+  pricePerShare  Decimal?      @db.Decimal(24, 6)
+  amount         Decimal?      @db.Decimal(24, 2)
+  currency       String        @default("VND")
+  fxRate         Decimal?      @db.Decimal(18, 6) // quy đổi sang VND nếu khác VND
+  convertibleId  String?       @unique
+  convertible    ConvertibleInstrument? @relation(fields: [convertibleId], references: [id])
+  esopGrantId    String?
+  esopGrant      EsopGrant?    @relation(fields: [esopGrantId], references: [id])
+  reversesId     String?       @unique // giao dịch đối ứng đảo một dòng POSTED
+  reverses       ShareTransaction? @relation("Reversal", fields: [reversesId], references: [id])
+  reversedBy     ShareTransaction? @relation("Reversal")
+  docRef         String? // số hợp đồng / nghị quyết
+  note           String?
+  createdById    String
+  createdAt      DateTime      @default(now())
+  postedById     String? // maker–checker: phải khác createdById
+  postedAt       DateTime?
+
+  @@index([status, date])
+}
+
+enum ConvertibleKind {
+  SAFE_POST
+  SAFE_PRE
+  CONVERTIBLE_NOTE
+}
+
+enum ConvertibleStatus {
+  OUTSTANDING
+  CONVERTED
+  CANCELLED
+}
+
+model ConvertibleInstrument {
+  id            String            @id @default(cuid())
+  code          String            @unique
+  investorId    String
+  investor      Investor          @relation(fields: [investorId], references: [id])
+  kind          ConvertibleKind
+  status        ConvertibleStatus @default(OUTSTANDING)
+  principal     Decimal           @db.Decimal(24, 2)
+  currency      String            @default("USD")
+  valuationCap  Decimal?          @db.Decimal(24, 2)
+  discountPct   Decimal?          @db.Decimal(5, 2) // 20 = 20%
+  interestPct   Decimal?          @db.Decimal(5, 2)
+  issueDate     DateTime
+  maturityDate  DateTime?
+  docRef        String?
+  notes         String?
+  createdAt     DateTime          @default(now())
+
+  conversion ShareTransaction?
+}
+
+// ───────────────────────── ESOP ─────────────────────────
+
+model EsopPool {
+  id           String     @id @default(cuid())
+  name         String // vd "ESOP 2022", "Mở rộng 2025"
+  shareClassId String
+  shareClass   ShareClass @relation(fields: [shareClassId], references: [id])
+  size         BigInt
+  approvedAt   DateTime
+  resolution   String? // số nghị quyết HĐQT/ĐHĐCĐ
+  createdAt    DateTime   @default(now())
+
+  grants EsopGrant[]
+}
+
+enum VestingFrequency {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum GrantStatus {
+  ACTIVE
+  TERMINATED // nghỉ việc: phần chưa vest bị thu hồi về pool
+  CANCELLED
+}
+
+model EsopGrant {
+  id             String           @id @default(cuid())
+  code           String           @unique // vd ESOP-2022-001
+  poolId         String
+  pool           EsopPool         @relation(fields: [poolId], references: [id])
+  holderId       String
+  holder         Investor         @relation(fields: [holderId], references: [id])
+  grantDate      DateTime
+  quantity       BigInt
+  exercisePrice  Decimal          @db.Decimal(24, 2) // VND / cổ phần
+  vestingStart   DateTime
+  cliffMonths    Int              @default(12)
+  vestingMonths  Int              @default(48)
+  frequency      VestingFrequency @default(MONTHLY)
+  status         GrantStatus      @default(ACTIVE)
+  terminatedAt   DateTime?
+  docRef         String?
+  createdAt      DateTime         @default(now())
+
+  exercises ShareTransaction[]
+}
+
+// ───────────────────────── Tài liệu ─────────────────────────
+
+enum Confidentiality {
+  INTERNAL // mọi nhân sự có quyền xem tài liệu
+  CONFIDENTIAL // cần quyền documents.confidential
+  STRICT // chỉ EXEC + người được chỉ định trong P1
+}
+
+model Document {
+  id              String          @id @default(cuid())
+  title           String
+  category        String // CONTRACT | CERTIFICATE | KYC | RESOLUTION | FINANCIAL | OTHER
+  confidentiality Confidentiality @default(CONFIDENTIAL)
+  investorId      String?
+  investor        Investor?       @relation(fields: [investorId], references: [id])
+  storageKey      String          @unique // khoá trong bucket private, không phải URL công khai
+  fileName        String
+  mime            String
+  size            Int
+  sha256          String
+  uploadedById    String
+  createdAt       DateTime        @default(now())
+  deletedAt       DateTime? // xoá mềm — file gốc giữ lại cho kiểm toán
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
