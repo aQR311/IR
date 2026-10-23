@@ -15,6 +15,20 @@
   --warn-soft: #fff3e0;
   --bad: #c42b2b;
   --bad-soft: #fdeaea;
+  /* Biểu đồ: bảng màu phân loại đã kiểm định (CVD-safe), thứ tự cố định — không đảo */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-muted: #b9bec7;
+  --seq-1: #86b6ef;
+  --seq-2: #5598e7;
+  --seq-3: #2a78d6;
+  --seq-4: #1c5cab;
+  --grid: #e6e8ec;
+  --axis: #c3c7cf;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -33,6 +47,19 @@
     --warn-soft: #33260f;
     --bad: #ff7b7b;
     --bad-soft: #3a1c1c;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-muted: #4a515e;
+    --seq-1: #184f95;
+    --seq-2: #1c5cab;
+    --seq-3: #2a78d6;
+    --seq-4: #5598e7;
+    --grid: #262c36;
+    --axis: #3a414d;
   }
 }
 

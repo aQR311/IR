@@ -6,6 +6,10 @@ import { pct } from "@/lib/cap-math";
 import { CATEGORY_LABEL, fmtPct, fmtShares } from "@/lib/format";
 import { Badge, Card, Empty, PageHeader, Stat, TableWrap } from "@/components/ui";
 import { capTable } from "@/server/captable";
+import { InlineBar } from "@/components/charts/charts";
+import { CATEGORY_SERIES } from "@/server/analytics";
+
+const seriesFor = (cat: string) => CATEGORY_SERIES.find((s) => s.key === cat)?.color ?? "var(--series-muted)";
 
 export const metadata: Metadata = { title: "Cap Table" };
 
@@ -15,6 +19,7 @@ export default async function CapTablePage({ searchParams }: PageProps<"/captabl
   const view = sp.view === "class" ? "class" : "holder";
   const t = await capTable();
 
+  const maxPct = Math.max(...t.rows.map((r) => r.pctBasic), 1);
   const byCategory = new Map<string, { issued: bigint; options: bigint; n: number }>();
   for (const r of t.rows) {
     const c = byCategory.get(r.category) ?? { issued: 0n, options: 0n, n: 0 };
@@ -63,8 +68,8 @@ export default async function CapTablePage({ searchParams }: PageProps<"/captabl
                 <tr key={r.investorId}>
                   <td>
                     <Link href={`/investors/${r.investorId}`} className="font-medium hover:underline">{r.name}</Link>
-                    <div className="flex gap-1 text-xs text-muted">
-                      {r.code}
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted">
+                      <span className="whitespace-nowrap">{r.code}</span>
                       {r.major && <Badge tone="accent">Cổ đông lớn</Badge>}
                       {r.isForeign && <Badge>Nước ngoài</Badge>}
                     </div>
@@ -75,7 +80,10 @@ export default async function CapTablePage({ searchParams }: PageProps<"/captabl
                   ))}
                   <td className="num text-right font-medium">{fmtShares(r.issued)}</td>
                   <td className="num text-right">{r.options ? fmtShares(r.options) : "—"}</td>
-                  <td className="num text-right">{fmtPct(r.pctBasic, 4)}</td>
+                  <td className="num whitespace-nowrap text-right">
+                    <span className="mr-2"><InlineBar pct={(r.pctBasic / maxPct) * 100} color={seriesFor(r.category)} /></span>
+                    {fmtPct(r.pctBasic, 4)}
+                  </td>
                   <td className="num text-right">{fmtPct(r.pctFD, 4)}</td>
                 </tr>
               ))}
@@ -118,7 +126,10 @@ export default async function CapTablePage({ searchParams }: PageProps<"/captabl
               <tbody>
                 {[...byCategory.entries()].map(([cat, v]) => (
                   <tr key={cat}>
-                    <td>{CATEGORY_LABEL[cat]}</td>
+                    <td>
+                      <span className="mr-1.5 inline-block size-2.5 rounded-sm align-middle" style={{ background: seriesFor(cat) }} aria-hidden />
+                      {CATEGORY_LABEL[cat]}
+                    </td>
                     <td className="num text-right">{v.n}</td>
                     <td className="num text-right">{fmtShares(v.issued)}</td>
                     <td className="num text-right">{fmtPct(pct(v.issued, t.issued))}</td>
